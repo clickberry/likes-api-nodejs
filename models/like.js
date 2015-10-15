@@ -11,27 +11,6 @@ var likeSchema = cassandra.Schema({
     }
 });
 
-var utc = moment.utc();
-console.log(utc.toString());
-var time = new cassandra.TimeUuid.now(new Date(utc.toString()));
-console.log(time);
-console.log(time.getDate());
-console.log(moment.utc(time.getDate()).toString());
-
-var t1 = cassandra.TimeUuid.min();
-console.log('#######################');
-console.log(t1);
-console.log(t1.toString());
-console.log(t1.getDate());
-
-var T = cassandra.TimeUuid;
-var t2 = new T(new Date(2999, 11, 31));
-console.log('#######################');
-console.log(t2);
-console.log(t2.toString());
-console.log(t2.getDate());
-
-
 likeSchema.methods.save = function (callback) {
     var relationId = this.obj.relationId;
     var userId = this.obj.userId;
@@ -72,13 +51,10 @@ likeSchema.statics.getRelationLikes = function (relationId, type, top, callback)
             return callback(err);
         }
 
-        //console.log(likes);
-        //console.log('1: ' + lastTimestamp);
         var cutLikes = likes.slice(0, count);
         totalLikes = totalLikes.concat(cutLikes);
 
         if (lastTimestamp && totalLikes.length < top) {
-            //console.log('2: ' + totalLikes.length);
             getTop(top, relationId, type, lastTimestamp, likeHashTable, topCallback);
         } else {
             callback(null, totalLikes);
@@ -99,7 +75,6 @@ function getTop(top, relationId, type, timestamp, likeHashTable, callback) {
 
         var rowCount = likesByType.rowLength;
         var lastTimestamp = rowCount == limit ? likesByType.rows[rowCount - 1].timestamp : false;
-        console.log('rowCount: ' + rowCount);
         if (!rowCount) {
             return callback(null, [], false);
         }
