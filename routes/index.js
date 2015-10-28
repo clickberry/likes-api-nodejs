@@ -1,7 +1,7 @@
 var express = require('express');
 var Like = require('../models/like');
 
-var permission=require('../middleware/permissions-mw')('relation');
+var permission = require('../middleware/permissions-mw')('relation');
 
 var Bus = require('../lib/bus-service');
 var bus = new Bus({});
@@ -13,6 +13,40 @@ module.exports = function (passport) {
         res.send();
     });
 
+    router.get('/up',
+        passport.authenticate('access-token', {session: false, assignProperty: 'payload'}),
+        permission.extractPayload('relationToken'),
+        function (req, res, next) {
+            var userId = req.payload.userId;
+            var relationId = req.relation.id;
+
+            Like.getUserLikes(relationId, 1, function (err, likes) {
+                if (err) {
+                    return next(err);
+                }
+
+                var likeDtos = likes.map(mapToLikeDto);
+                res.send(likeDtos);
+            });
+        });
+
+    router.get('/down',
+        passport.authenticate('access-token', {session: false, assignProperty: 'payload'}),
+        permission.extractPayload('relationToken'),
+        function (req, res, next) {
+            var userId = req.payload.userId;
+            var relationId = req.relation.id;
+
+            Like.getUserLikes(relationId, -1, function (err, likes) {
+                if (err) {
+                    return next(err);
+                }
+
+                var likeDtos = likes.map(mapToLikeDto);
+                res.send(likeDtos);
+            });
+        });
+
     router.get('/:relationToken/up',
         passport.authenticate('access-token', {session: false, assignProperty: 'payload'}),
         permission.extractPayload('relationToken'),
@@ -20,12 +54,12 @@ module.exports = function (passport) {
             var userId = req.payload.userId;
             var relationId = req.relation.id;
 
-            Like.getRelationLikes(relationId, 1, 10, function(err, likes){
-                if(err){
+            Like.get(relationId, 1, 10, null, function (err, likes, page) {
+                if (err) {
                     return next(err);
                 }
 
-                var likeDtos=likes.map(mapToLikeDto);
+                var likeDtos = likes.map(mapToLikeDto);
                 res.send(likeDtos);
             });
         });
@@ -37,12 +71,12 @@ module.exports = function (passport) {
             var userId = req.payload.userId;
             var relationId = req.relation.id;
 
-            Like.getRelationLikes(relationId, -1, 10, function(err, likes){
-                if(err){
+            Like.get(relationId, -1, 10, null, function (err, likes, page) {
+                if (err) {
                     return next(err);
                 }
 
-                var likeDtos=likes.map(mapToLikeDto);
+                var likeDtos = likes.map(mapToLikeDto);
                 res.send(likeDtos);
             });
         });
@@ -54,18 +88,24 @@ module.exports = function (passport) {
             var userId = req.payload.userId;
             var relationId = req.relation.id;
 
-            var like=new Like({
+            var like = new Like({
                 relationId: relationId,
-                userId:userId,
+                userId: userId,
                 type: 1
             });
 
-            like.save(function(err){
-                if(err){
+            like.create(function (err) {
+                if (err) {
                     return next(err);
                 }
 
-                res.send();
+                bus.publishLikeSignal(mapForBus(like), function(err){
+                    if (err) {
+                        return next(err);
+                    }
+
+                    res.sendStatus(201);
+                });
             });
         });
 
@@ -76,18 +116,24 @@ module.exports = function (passport) {
             var userId = req.payload.userId;
             var relationId = req.relation.id;
 
-            var like=new Like({
+            var like = new Like({
                 relationId: relationId,
-                userId:userId,
+                userId: userId,
                 type: -1
             });
 
-            like.save(function(err){
-                if(err){
+            like.create(function (err) {
+                if (err) {
                     return next(err);
                 }
 
-                res.send();
+                bus.publishLikeSignal(mapForBus(like), function(err){
+                    if (err) {
+                        return next(err);
+                    }
+
+                    res.sendStatus(201);
+                });
             });
         });
 
@@ -98,18 +144,24 @@ module.exports = function (passport) {
             var userId = req.payload.userId;
             var relationId = req.relation.id;
 
-            var like=new Like({
+            var like = new Like({
                 relationId: relationId,
-                userId:userId,
+                userId: userId,
                 type: 0
             });
 
-            like.save(function(err){
-                if(err){
+            like.create(function (err) {
+                if (err) {
                     return next(err);
                 }
 
-                res.send();
+                bus.publishLikeSignal(mapForBus(like), function(err){
+                    if (err) {
+                        return next(err);
+                    }
+
+                    res.send();
+                });
             });
         });
 
@@ -147,11 +199,20 @@ module.exports = function (passport) {
     return router;
 };
 
-function mapToLikeDto(like){
+function mapToLikeDto(like) {
     return {
         relationId: like.relationid,
         userId: like.userid,
         type: like.type,
-        date: like.timestamp.getDate()
+        created: like.timestamp.getDate()
+    }
+}
+
+function mapForBus(like) {
+    return {
+        relationId: like.relationid,
+        userId: like.userid,
+        type: like.type,
+        timestamp: like.timestamp
     }
 }

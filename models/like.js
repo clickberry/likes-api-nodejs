@@ -12,9 +12,9 @@ var likeSchema = cassandra.Schema({
 });
 
 likeSchema.methods.save = function (callback) {
-    var relationId = this.obj.relationId;
-    var userId = this.obj.userId;
-    var type = this.obj.type;
+    var relationId = this.relationId;
+    var userId = this.userId;
+    var type = this.type;
 
     var timestamp = cassandra.TimeUuid.now();
 
@@ -101,11 +101,103 @@ function getTop(top, relationId, type, timestamp, likeHashTable, callback) {
     });
 }
 
+//###########################################################
+
+likeSchema.methods.create = function (callback) {
+    var relationId = this.relationid;
+    var userId = this.userid;
+    var type = this.type;
+
+    var timestamp = this.timestamp = cassandra.TimeUuid.now();
+
+    var query = 'insert into likesRelationUser (relationId, userId, timestamp, type) values (?, ?, ?, ?)';
+    var params = [relationId, userId, timestamp, type];
+    console.log(params);
+    Likes.client.execute(query, params, {prepare: true}, function (err) {
+        if (err) {
+            return callback(err);
+        }
+
+        callback();
+    });
+};
+
+likeSchema.statics.get = function (relationId, type, top, page, callback) {
+    var query1 = 'select * from likesRelationType where relationId=? and type=?';
+    var params1 = [relationId, type];
+
+    var likesHashTable = {};
+    var userIds = [];
+    var likes = [];
+    var fetchSize = top * 2;
+
+    Likes.client.eachRow(query1, params1, {
+        prepare: true,
+        fetchSize: fetchSize,
+        pageState: page
+    }, rowRead, endRead);
+
+    function rowRead(n, row) {
+        if (!likesHashTable[row.userid]) {
+            likesHashTable[row.userid] = row;
+            userIds.push(row.userid);
+        }
+    }
+
+    function endRead(err, result) {
+        if (err) {
+            return callback(err);
+        }
+
+        if (!result.rowLength) {
+            return callback(null, likes);
+        }
+
+        console.log(result);
+        console.log('pageState: ' + result.pageState);
+        console.log('rowLength:' + result.rowLength);
+
+        page = result.meta.pageState;
+
+        var keys = getKeys(userIds);
+
+        var query2 = 'select * from likesRelationUserState where relationId=? and userId in (' + keys + ')';
+        var params2 = [relationId];
+console.log(query2);
+        Likes.client.eachRow(query2, params2, {prepare: true},
+            function (n, row) {
+                var like = likesHashTable[row.userid];
+
+                if (like.type === row.type) {
+                    likes.push(row);
+                }
+            }, function (err, result) {
+                if (err) {
+                    return callback(err);
+                }
+
+                console.log(result);
+                if (likes.length < top && page) {
+                    Likes.client.eachRow(query1, params1, {
+                        prepare: true,
+                        fetchSize: fetchSize,
+                        pageState: page
+                    }, rowRead, endRead);
+                }
+
+                callback(null, likes.slice(0, top), page);
+            });
+    }
+};
+
+//###########################################################
+
+
 var Likes = module.exports = cassandra.model('likes', likeSchema);
 
 
-function getKeys(keys) {
-    var strKeys = keys.map(function (item) {
+function getKeys(userIds) {
+    var strKeys = userIds.map(function (item) {
         return "'" + item + "'";
     });
 

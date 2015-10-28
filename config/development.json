@@ -14,6 +14,6 @@
   "nsqd": {
     "address": "192.168.99.100",
     "port": "4150",
-    "disable": "disable"
+    "disable": "enable"
   }
 }
